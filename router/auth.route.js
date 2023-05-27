@@ -64,7 +64,7 @@ authroute.post("/login", async (req, res) => {
         }
 
         // Generate a JWT token
-        const token = jwt.sign({ userId: user._id, email: email }, "secretKey");
+        const token = jwt.sign({ userId: user._id, email: email }, process.env.JWT_SECRET);
 
         return res.status(200).json({
             message: "Login Successfully",
