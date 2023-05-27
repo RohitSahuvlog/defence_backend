@@ -38,9 +38,9 @@ authroute.post("/signup", async (req, res) => {
             state,
             role,
         });
-        await user.save();
+        await user.save()
 
-        res.status(201).json({ message: "User created" });
+        res.status(201).json({ message: "User   created" });
     } catch (error) {
         console.error("Error in signup:", error);
         res.status(500).json({ message: "Internal server error" });
