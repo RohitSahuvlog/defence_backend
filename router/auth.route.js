@@ -3,8 +3,16 @@ const bcrypt = require("bcryptjs");
 const authroute = router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.models");
+const query = require("../models/query.model");
+const AWS = require("aws-sdk");
+// const { nanoid } = require("nanoid");
+const awsConfig = {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION,
+};
 
-// phucvdwcqhczzhcj
+const SES = new AWS.SES(awsConfig);
 authroute.post("/signup", async (req, res) => {
     try {
         const {
@@ -75,6 +83,63 @@ authroute.post("/login", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 });
+
+authroute.post("/feedback", async (req, res) => {
+    try {
+        const { name, email, querydetails } = req.body;
+        const querysave = new query({
+            name,
+            email,
+            querydetails,
+        });
+        await querysave.save();
+        // Create a transporter object with SMTP configuration
+        await sendEmail(email)
+        res.status(200).json({
+            message: "Email sent successfully"
+        });
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+
+
+const sendEmail = async (emailto) => {
+    const emailfrom = process.env.FROM_EMAIL;
+    // const shortCode = nanoid(6).toUpperCase();
+    let shortCode = "mndsnm,d"
+
+    try {
+        //prepare email to send
+
+        const params = {
+            Source: emailfrom,
+            Destination: {
+                ToAddresses: [emailto],
+            },
+            Message: {
+                Subject: {
+                    Charset: "UTF-8",
+                    Data: `OTP Verification`,
+                },
+                Body: {
+                    Html: {
+                        Charset: "UTF-8",
+                        Data: `<h1>Your verification code is ${shortCode}</h1>`,
+                    },
+                },
+            },
+        };
+
+        const emailSent = await (SES.sendEmail(params).promise());
+        console.log(emailSent)
+    } catch (error) {
+        console.log(error);
+    }
+};
 
 module.exports = {
     authroute,

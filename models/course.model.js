@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const courseSchema = new Schema({
     title: {
         type: String,
-        required: true
+        required: false
     },
     thumbnail: {
         type: String,
@@ -12,7 +12,7 @@ const courseSchema = new Schema({
     },
     description: {
         type: String,
-        required: true
+        required: false
     },
     video_url: {
         type: String,

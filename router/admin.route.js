@@ -1,35 +1,72 @@
 const multer = require('multer');
+const dotenv = require("dotenv");
+dotenv.config();
+const AWS = require("aws-sdk");
 const router = require("express");
 const Course = require("../models/course.model");
 const studyMaterial = require("../models/studymaterial.model");
 const User = require("../models/user.models");
 const storage = require('../middlewares/fileconfig');
-
 const adminroute = router();
-const upload = multer({
-    storage: storage,
-    // fileFilter: function (req, file, cb) {
-    //     // Check the file type or MIME type
-    //     if (file.mimetype === 'application/pdf') {
-    //         // Accept the file
-    //         cb(null, true);
-    //     } else {
-    //         // Reject the file
-    //         cb(new Error('Only PDF files are allowed'));
-    //     }
-    // }
-});
-adminroute.post("/uploadcourse", upload.single('file'), async (req, res) => {
-    try {
-        const { title, thumbnail, description, video_url } = req.body;
 
-        if (!title || !thumbnail || !description || !video_url) {
-            return res.status(401).json({ message: "fill the all fields" });
+
+const bucketName = process.env.bucketName;
+
+const awsConfig = {
+    accessKeyId: process.env.AccessKey,
+    secretAccessKey: process.env.SecretKey,
+    region: process.env.region,
+};
+
+const S3 = new AWS.S3(awsConfig);
+
+
+const uploadimage = multer({
+    storage: storage,
+    fileFilter: function (req, file, cb) {
+        // Check the file type or MIME type
+        if (file.mimetype === "image/jpeg" ||
+            file.mimetype === "image/png") {
+            // Accept the file
+            cb(null, true);
+        } else {
+            // Reject the file
+            cb(new Error('File type is incorrec'));
         }
+    }
+});
+
+//upload to s3
+const uploadToS3 = (fileData) => {
+    return new Promise((resolve, reject) => {
+        const params = {
+            Bucket: bucketName,
+            Key: `${Date.now().toString()}.png`,
+            Body: fileData,
+        };
+        S3.upload(params, (err, data) => {
+            if (err) {
+                console.log(err);
+                return reject(err);
+            }
+            return resolve(data);
+        });
+    });
+};
+
+
+
+adminroute.post("/uploadcourse", uploadimage.single('file'), async (req, res) => {
+    try {
+        let image_url
+        if (req.file) {
+            image_url = await uploadToS3(req.file.buffer);
+        }
+        const { title, thumbnail, description, video_url } = req.body;
 
         const course = new Course({
             title,
-            thumbnail,
+            thumbnail: image_url.Location,
             description,
             video_url,
         });
@@ -68,18 +105,57 @@ adminroute.delete("/deletecourse", async (req, res) => {
     }
 });
 
+const upload = multer({
+    storage: storage,
+    fileFilter: function (req, file, cb) {
+        // Check the file type or MIME type
+        if (file.mimetype === "application/pdf") {
+            // Accept the file
+            cb(null, true);
+        } else {
+            // Reject the file
+            cb(new Error('File type is incorrec'));
+        }
+    }
+});
+
+
+//upload to s3
+const uploadpdfToS3 = (fileData) => {
+    return new Promise((resolve, reject) => {
+        const params = {
+            Bucket: bucketName,
+            Key: `${Date.now().toString()}.pdf`,
+            Body: fileData,
+        };
+        S3.upload(params, (err, data) => {
+            if (err) {
+                console.log(err);
+                return reject(err);
+            }
+            console.log(data);
+            return resolve(data);
+        });
+    });
+};
+
 adminroute.post("/uploadmaterial", upload.single('file'), async (req, res) => {
+    let pdf_link
+    if (req.file) {
+        pdf_url = await uploadpdfToS3(req.file.buffer);
+    }
+
     try {
-        const { title, description } = req.body;
+        const { title, description, pdf_link } = req.body;
         const file = req.file;
-        console.log(file.filename)
+        // console.log(file.filename)
         if (!title || !description) {
             return res.status(401).json({ message: "fill the all fields" });
         }
         const material = new studyMaterial({
             title,
             description,
-            pdf_link: file.filename,
+            pdf_link: pdf_url.Location,
         });
         await material.save();
         return res.status(201).json({
