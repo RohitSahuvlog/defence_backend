@@ -140,7 +140,7 @@ const uploadpdfToS3 = (fileData) => {
 };
 
 adminroute.post("/uploadmaterial", upload.single('file'), async (req, res) => {
-    let pdf_link
+    let pdf_url
     if (req.file) {
         pdf_url = await uploadpdfToS3(req.file.buffer);
     }
