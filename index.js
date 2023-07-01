@@ -5,7 +5,7 @@ const { authentication } = require("./middlewares/authentication");
 const { authroute } = require("./router/auth.route");
 const { userrouter } = require("./router/user.route");
 const { adminroute } = require("./router/admin.route");
-const authorization = require("./middlewares/authrisation");
+const { authorization } = require("./middlewares/authrisation");
 const path = require('path');
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -19,8 +19,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authroute);
-app.use(authentication);
 app.use("/api/user", userrouter);
+app.use(authentication);
 app.use("/api/admin", authorization(["admin"]), adminroute)
 app.get('/download/:filename', function (req, res) {
     const fileName = req.params.filename.toString();

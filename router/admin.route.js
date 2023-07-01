@@ -1,211 +1,202 @@
-const multer = require('multer');
-const dotenv = require("dotenv");
-dotenv.config();
+const adminroute = require("express").Router();
+const multer = require("multer");
 const AWS = require("aws-sdk");
-const router = require("express");
+const dotenv = require("dotenv");
 const Course = require("../models/course.model");
-const studyMaterial = require("../models/studymaterial.model");
+const StudyMaterial = require("../models/studymaterial.model");
 const User = require("../models/user.models");
-const storage = require('../middlewares/fileconfig');
-const adminroute = router();
 
-
+dotenv.config();
 const bucketName = process.env.bucketName;
-
 const awsConfig = {
     accessKeyId: process.env.AccessKey,
     secretAccessKey: process.env.SecretKey,
     region: process.env.region,
 };
-
 const S3 = new AWS.S3(awsConfig);
 
-
-const uploadimage = multer({
-    storage: storage,
-    fileFilter: function (req, file, cb) {
-        // Check the file type or MIME type
-        if (file.mimetype === "image/jpeg" ||
-            file.mimetype === "image/png") {
-            // Accept the file
+// Multer storage configuration
+const storage = multer.memoryStorage();
+const uploadImage = multer({ storage }).single("file");
+const uploadPDF = multer({
+    storage,
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === "application/pdf") {
             cb(null, true);
         } else {
-            // Reject the file
-            cb(new Error('File type is incorrec'));
+            cb(new Error("File type is incorrect"));
         }
-    }
-});
+    },
+}).single("file");
 
-//upload to s3
-const uploadToS3 = (fileData) => {
-    return new Promise((resolve, reject) => {
-        const params = {
-            Bucket: bucketName,
-            Key: `${Date.now().toString()}.png`,
-            Body: fileData,
-        };
-        S3.upload(params, (err, data) => {
-            if (err) {
-                console.log(err);
-                return reject(err);
-            }
-            return resolve(data);
-        });
-    });
+// Helper function to upload a file to S3
+const uploadToS3 = (fileData, fileExtension) => {
+    const params = {
+        Bucket: bucketName,
+        Key: `${Date.now().toString()}.${fileExtension}`,
+        Body: fileData,
+    };
+
+    return S3.upload(params).promise();
 };
 
-
-
-adminroute.post("/uploadcourse", uploadimage.single('file'), async (req, res) => {
+// Course routes
+adminroute.post("/uploadcourse", uploadImage, async (req, res) => {
     try {
-        let image_url
+        let image_url = null;
+
         if (req.file) {
-            image_url = await uploadToS3(req.file.buffer);
+            const uploadResult = await uploadToS3(req.file.buffer, "png");
+            image_url = uploadResult.Location;
         }
-        const { title, thumbnail, description, video_url } = req.body;
+
+        const { title, description, video_url } = req.body;
+
+        if (!title || !description) {
+            return res.status(400).json({ message: "Please provide title and description" });
+        }
 
         const course = new Course({
             title,
-            thumbnail: image_url.Location,
+            thumbnail: image_url,
             description,
             video_url,
         });
+
         await course.save();
 
-        res.status(201).json({ message: "Course Successfully upload" });
+        res.status(201).json({ message: "Course successfully uploaded" });
     } catch (error) {
-        console.error("Error in signup:", error);
+        console.error("Error in uploadcourse:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
-adminroute.patch("/updatecourse", async (req, res) => {
-    try {
-        const { title, thumbnail, description } = req.body;
 
-        if (!title || !thumbnail || !description) {
-            return res.status(401).json({ message: "fill the all fields" });
+adminroute.patch("/updatecourse", uploadImage, async (req, res) => {
+    try {
+        let image_url = null;
+
+        if (req.file) {
+            const uploadResult = await uploadToS3(req.file.buffer, "png");
+            image_url = uploadResult.Location;
         }
-        var data = await Course.findOneAndUpdate({ _id: req.query.id }, req.body);
-        console.log(data)
+
+        const { title, description } = req.body;
+
+        if (!title || !description) {
+            return res.status(400).json({ message: "Please provide title and description" });
+        }
+
+        const payload = {
+            title,
+            thumbnail: image_url,
+            description,
+        };
+
+        const updatedCourse = await Course.findByIdAndUpdate(req.query.id, payload);
+
+        if (!updatedCourse) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
         res.status(200).json({ message: "Course updated" });
     } catch (error) {
-        console.error("Error in signup:", error);
+        console.error("Error in updatecourse:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
 adminroute.delete("/deletecourse", async (req, res) => {
     try {
-        await Course.deleteOne({ _id: req.query.id });
+        const deletedCourse = await Course.findByIdAndDelete(req.query.id);
 
-        res.status(200).json({ message: "Course successfully delete" });
+        if (!deletedCourse) {
+            return res.status(404).json({ message: "Course not found" });
+        }
+
+        res.status(200).json({ message: "Course successfully deleted" });
     } catch (error) {
-        console.error("Error in signup:", error);
+        console.error("Error in deletecourse:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
-const upload = multer({
-    storage: storage,
-    fileFilter: function (req, file, cb) {
-        // Check the file type or MIME type
-        if (file.mimetype === "application/pdf") {
-            // Accept the file
-            cb(null, true);
-        } else {
-            // Reject the file
-            cb(new Error('File type is incorrec'));
-        }
-    }
-});
-
-
-//upload to s3
-const uploadpdfToS3 = (fileData) => {
-    return new Promise((resolve, reject) => {
-        const params = {
-            Bucket: bucketName,
-            Key: `${Date.now().toString()}.pdf`,
-            Body: fileData,
-        };
-        S3.upload(params, (err, data) => {
-            if (err) {
-                console.log(err);
-                return reject(err);
-            }
-            console.log(data);
-            return resolve(data);
-        });
-    });
-};
-
-adminroute.post("/uploadmaterial", upload.single('file'), async (req, res) => {
-    let pdf_url
-    if (req.file) {
-        pdf_url = await uploadpdfToS3(req.file.buffer);
-    }
-
+// Study Material routes
+adminroute.post("/uploadmaterial", uploadPDF, async (req, res) => {
     try {
-        const { title, description, pdf_link } = req.body;
-        const file = req.file;
-        // console.log(file.filename)
-        if (!title || !description) {
-            return res.status(401).json({ message: "fill the all fields" });
+        let pdf_url = null;
+
+        if (req.file) {
+            const uploadResult = await uploadToS3(req.file.buffer, "pdf");
+            pdf_url = uploadResult.Location;
         }
-        const material = new studyMaterial({
+        const { title, description } = req.body;
+
+        if (!title || !description) {
+            return res.status(400).json({ message: "Please provide title and description" });
+        }
+
+        const material = new StudyMaterial({
             title,
             description,
-            pdf_link: pdf_url.Location,
+            pdf_link: pdf_url,
         });
+
         await material.save();
-        return res.status(201).json({
-            message: "Material Successfully upload",
-        });
+
+        res.status(201).json({ message: "Material successfully uploaded" });
     } catch (error) {
-        console.error("Error in login:", error);
+        console.error("Error in uploadmaterial:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
-adminroute.patch("/updatematerial", async (req, res) => {
+adminroute.patch("/updatematerials", async (req, res) => {
     try {
         const { title, description } = req.body;
 
         if (!title || !description) {
-            return res.status(401).json({ message: "fill the all fields" });
+            return res.status(400).json({ message: "Please provide title and description" });
         }
 
-        await studyMaterial.updateOne({ _id: req.query.id }, req.body);
+        const updatedMaterial = await StudyMaterial.findByIdAndUpdate(req.query.id, { title, description });
 
-        res.status(201).json({ message: "Studymaterial updated" });
+        if (!updatedMaterial) {
+            return res.status(404).json({ message: "Study material not found" });
+        }
+
+        res.status(200).json({ message: "Study material updated" });
     } catch (error) {
-        console.error("Error in signup:", error);
+        console.error("Error in updatematerial:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
 adminroute.delete("/deletematerial", async (req, res) => {
     try {
-        await studyMaterial.deleteOne({ _id: req.query.id });
+        const deletedMaterial = await StudyMaterial.findByIdAndDelete(req.query.id);
 
-        res.status(200).json({ message: "Studymaterial successfully delete" });
+        if (!deletedMaterial) {
+            return res.status(404).json({ message: "Study material not found" });
+        }
+
+        res.status(200).json({ message: "Study material successfully deleted" });
     } catch (error) {
-        console.error("Error in signup:", error);
+        console.error("Error in deletematerial:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
+// User routes
 adminroute.get("/getuserlist", async (req, res) => {
     try {
         const userList = await User.find();
 
         res.status(200).json({ userList });
     } catch (error) {
-        console.error("Error in getcourse:", error);
+        console.error("Error in getuserlist:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
 
-module.exports = {
-    adminroute,
-};
+module.exports = { adminroute };
