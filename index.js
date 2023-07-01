@@ -46,3 +46,4 @@ app.listen(PORT, async (req, res) => {
 
     console.log(`server is start at ${PORT}`);
 });
+// mongo_url = "mongodb+srv://sahu86744:rohitsahu54321@cluster0.ciixm9b.mongodb.net/?retryWrites=true&w=majority"
